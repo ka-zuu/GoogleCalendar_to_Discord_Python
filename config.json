@@ -1,8 +1,0 @@
-{
-  "calendar_ids": [
-      "red.bind@gmail.com",
-      "elica93miya@gmail.com"
-  ],
-  "discord_webhook_url": "http://your-webhook-url.com",
-  "s3_endpoint": "http://your-s3-endpoint.com"
-}
