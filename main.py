@@ -9,17 +9,17 @@ from googleapiclient.errors import HttpError
 import datetime
 import sys
 import json
+import os
+from dotenv import load_dotenv
 
 
 def main():
     # 外部ファイルから設定を読み込み、変数設定
-    with open("config.json", "r") as f:
-        config = json.load(f)
-
+    load_dotenv()
     # カレンダーID、Webhook URL、S3エンドポイントを取得する
-    calendar_ids = config["calendar_ids"]
-    discord_webhook_url = config["discord_webhook_url"]
-    s3_endpoint = config["s3_endpoint"]
+    calendar_ids = os.getenv("calendar_ids").split(",")
+    discord_webhook_url = os.getenv("discord_webhook_url")
+    s3_endpoint = os.getenv("s3_endpoint")
 
     # 今日の日付
     today = (
