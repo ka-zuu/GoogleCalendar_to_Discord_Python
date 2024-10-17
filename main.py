@@ -10,30 +10,26 @@ import datetime
 import sys
 import json
 import os
-import requests
+from dotenv import load_dotenv
 
 
 def main():
-    # 引数をチェック。足りなければsummary扱い
-    if len(sys.argv) < 2:
-        sys.argv.append("summary")
+    # 外部ファイルから設定を読み込み、変数設定
+    with open("config.json", "r") as f:
+        config = json.load(f)
 
-    # 外部ファイルから設定を読み込み、変数設定する
-    # ファイルがなければ終了
-    if not os.path.exists("config.json"):
-        print("config.jsonがありません。")
-        sys.exit(1)
-    # ファイルが不正なら終了
-    try:
-        with open("config.json", "r") as f:
-            config = json.load(f)
-    except JSONDecodeError:
-        print("config.jsonが不正です。")
-        sys.exit(1)
     # カレンダーID、Webhook URL、S3エンドポイントを取得する
-    calendar_ids = config["calendar_ids"]
-    discord_webhook_url = config["discord_webhook_url"]
-    s3_endpoint = config["s3_endpoint"]
+    calendar_ids = os.getenv("calendar_ids").split(",")
+    discord_webhook_url = os.getenv("discord_webhook_url")
+    s3_endpoint = os.getenv("s3_endpoint")
+
+    # 今日の日付
+    today = (
+        datetime.datetime.now()
+        .replace(hour=0, minute=0, second=0, microsecond=0)
+        .isoformat()
+        + "+09:00"
+    )
 
     # Googleの認証情報を取得してオブジェクト作成
     creds = Credentials.from_service_account_file(
