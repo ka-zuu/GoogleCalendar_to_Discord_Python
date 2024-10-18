@@ -93,67 +93,80 @@ def get_summary(service, calendar_ids):
 
 # カレンダーから予定の差分を取得して、一覧を作成する関数
 def get_change(service, calendar_ids):
+    changes = {"added": [], "deleted": []}
+    sync_tokens = {}
+
     # 保存されているsyncTokenがあれば取得する
-    # ファイルがない場合は、初回として扱う
-    if not os.path.exists("synctoken.json"):
-        sync_token_json = None
-    try:
+    if os.path.exists("synctoken.json"):
         with open("synctoken.json", "r") as f:
-            st = json.load(f)
-        sync_token_json = st["sync_token"]
-    except JSONDecodeError:
-        sync_token_json = None
+            sync_tokens = json.load(f)
 
     # カレンダーIDの数だけループ
     for calendar_id in calendar_ids:
-        # カレンダーIDのsync_tokenがあれば、それを使って予定の差分を取得
-        # なければ、全件取得
-        if sync_token_json:
-            for calendar in sync_token_json["calendars"]:
-                if calendar["calendar_id"] == calendar_id:
-                    sync_token = calendar["sync_token"]
-                    break
-            events_result = (
-                service.events()
-                .list(
-                    calendarId=calendar_id,
-                    syncToken=sync_token,
-                    singleEvents=True,
-                    orderBy="startTime",
+        page_token = None
+        while True:
+            # カレンダーIDのsync_tokenがあれば、それを使って予定の差分を取得
+            # なければ、全件取得
+            if calendar_id in sync_tokens:
+                events_result = (
+                    service.events()
+                    .list(
+                        calendarId=calendar_id,
+                        syncToken=sync_tokens[calendar_id],
+                        singleEvents=True,
+                        orderBy="startTime",
+                        pageToken=page_token,
+                    )
+                    .execute()
                 )
-                .execute()
-            )
-        else:
-            events_result = (
-                service.events()
-                .list(
-                    calendarId=calendar_id,
-                    timeMin=datetime.datetime.now()
-                    .replace(hour=0, minute=0, second=0, microsecond=0)
-                    .isoformat()
-                    + "+09:00",
-                    singleEvents=True,
-                    orderBy="startTime",
+            else:
+                events_result = (
+                    service.events()
+                    .list(
+                        calendarId=calendar_id,
+                        timeMin="1970-01-01T00:00:00Z",
+                        singleEvents=True,
+                        orderBy="startTime",
+                        pageToken=page_token,
+                    )
+                    .execute()
                 )
-                .execute()
-            )
-        events = events_result.get("items", [])
 
-        # 予定がなければ、次のカレンダーIDへ
-        if not events:
-            continue
+            # 追加された予定を取得
+            for event in events_result.get("items", []):
+                if "status" in event and event["status"] == "cancelled":
+                    changes["deleted"].append(event)
+                else:
+                    changes["added"].append(event)
 
-        # 予定があれば、差分の文字列を整形する
-        change = "【" + calendar_id + "】\n"
-        for event in events:
-            start = event["start"].get("dateTime", event["start"].get("date"))
-            change += start[11:16] + " " + event["summary"] + "\n"
+            # 次のページがあれば、ページトークンを更新
+            page_token = events_result.get("nextPageToken")
+            if not page_token:
+                break
 
-        # 空行を追加
-        change += "\n"
+        # syncTokenを保存
+        sync_tokens[calendar_id] = events_result.get("nextSyncToken")
+
+    # syncTokenをファイルに保存
+    with open("synctoken.json", "w") as f:
+        json.dump(sync_tokens, f)
+
+    # 追加された予定を文字列化
+    added_events = "追加された予定：\n"
+    for event in changes["added"]:
+        start = event["start"].get("dateTime", event["start"].get("date"))
+        end = event["end"].get("dateTime", event["end"].get("date"))
+        added_events += f"{start},{end},{event['summary']}\n"
+
+    # 削除された予定を文字列化
+    deleted_events = "削除された予定：\n"
+    for event in changes["deleted"]:
+        start = event["start"].get("dateTime", event["start"].get("date"))
+        end = event["end"].get("dateTime", event["end"].get("date"))
+        deleted_events += f"{start},{end},{event['summary']}\n"
 
     # 一覧を返す
-    return change
+    return added_events + "\n" + deleted_events
 
 
 # Discordに送信する関数
