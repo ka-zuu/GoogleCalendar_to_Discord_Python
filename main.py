@@ -105,47 +105,55 @@ def get_change(service, calendar_ids):
     for calendar_id in calendar_ids:
         page_token = None
         while True:
-            # カレンダーIDのsync_tokenがあれば、それを使って予定の差分を取得
-            # なければ、全件取得
-            if calendar_id in sync_tokens:
-                events_result = (
-                    service.events()
-                    .list(
-                        calendarId=calendar_id,
-                        syncToken=sync_tokens[calendar_id],
-                        singleEvents=True,
-                        orderBy="startTime",
-                        pageToken=page_token,
+            try:
+                # カレンダーIDのsync_tokenがあれば、それを使って予定の差分を取得
+                # なければ、全件取得
+                if calendar_id in sync_tokens:
+                    events_result = (
+                        service.events()
+                        .list(
+                            calendarId=calendar_id,
+                            syncToken=sync_tokens[calendar_id],
+                            singleEvents=True,
+                            orderBy="startTime",
+                            pageToken=page_token,
+                        )
+                        .execute()
                     )
-                    .execute()
-                )
-            else:
-                events_result = (
-                    service.events()
-                    .list(
-                        calendarId=calendar_id,
-                        timeMin="1970-01-01T00:00:00Z",
-                        singleEvents=True,
-                        orderBy="startTime",
-                        pageToken=page_token,
-                    )
-                    .execute()
-                )
-
-            # 追加された予定を取得
-            for event in events_result.get("items", []):
-                if "status" in event and event["status"] == "cancelled":
-                    changes["deleted"].append(event)
                 else:
-                    changes["added"].append(event)
+                    events_result = (
+                        service.events()
+                        .list(
+                            calendarId=calendar_id,
+                            timeMin="1970-01-01T00:00:00Z",
+                            singleEvents=True,
+                            orderBy="startTime",
+                            pageToken=page_token,
+                        )
+                        .execute()
+                    )
 
-            # 次のページがあれば、ページトークンを更新
-            page_token = events_result.get("nextPageToken")
-            if not page_token:
-                break
+                # 追加された予定を取得
+                for event in events_result.get("items", []):
+                    if "status" in event and event["status"] == "cancelled":
+                        changes["deleted"].append(event)
+                    else:
+                        changes["added"].append(event)
 
-        # syncTokenを保存
-        sync_tokens[calendar_id] = events_result.get("nextSyncToken")
+                # 次のページがあれば、ページトークンを更新
+                page_token = events_result.get("nextPageToken")
+                if not page_token:
+                    break
+
+                # syncTokenを保存
+                sync_tokens[calendar_id] = events_result.get("nextSyncToken")
+
+            except HttpError as error:
+                if error.resp.status == 410:
+                    # syncTokenが無効な場合、全件取得
+                    del sync_tokens[calendar_id]
+                else:
+                    raise
 
     # syncTokenをファイルに保存
     with open("synctoken.json", "w") as f:
@@ -188,3 +196,10 @@ def send_discord(message, discord_webhook_url):
 
 if __name__ == "__main__":
     main()
+
+# synctoken.jsonの想定されるファイル形式は以下の通りです。
+# {
+#     "calendar_id_1": "sync_token_1",
+#     "calendar_id_2": "sync_token_2",
+#     ...
+# }
