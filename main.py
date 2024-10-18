@@ -125,7 +125,8 @@ def get_change(service, calendar_ids):
                         service.events()
                         .list(
                             calendarId=calendar_id,
-                            timeMin="1970-01-01T00:00:00Z",
+                            timeMin=datetime.datetime.now().isoformat() + "Z",  # P45bf
+                            timeMax=(datetime.datetime.now() + datetime.timedelta(days=730)).isoformat() + "Z",  # Pdb62
                             singleEvents=True,
                             orderBy="startTime",
                             pageToken=page_token,
